@@ -43,6 +43,7 @@ type manager struct {
 	webSocketGoCount     atomic.Int64
 	bufPool              sync.Pool
 	epfd                 int
+	epfdMu               RWMutex
 }
 
 // Start 启动代理服务的各个组件
