@@ -11,7 +11,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	//"github.com/orcaman/concurrent-map/v2"
+	"github.com/orcaman/concurrent-map/v2"
 	"go.uber.org/zap" // 高性能日志库
 )
 
@@ -36,6 +36,7 @@ var newManager = sync.OnceValue(func() *manager {
 // manager 结构体管理整个代理服务的核心组件
 type manager struct {
 	tcm                  *taskConsumerManager.Manager // 任务调度管理器
+	epollFdMap           cmap.ConcurrentMap[int, *FdConn]
 	tcpListener          net.Listener
 	websocketTcpListener net.Listener
 	isRun                atomic.Bool
@@ -49,6 +50,10 @@ type manager struct {
 // Start 启动代理服务的各个组件
 func (m *manager) Start() error {
 	m.isRun.Store(true)
+
+	m.epollFdMap = cmap.NewWithCustomShardingFunction[int, *FdConn](func(k int) uint32 {
+		return uint32(k)
+	})
 
 	epfd, err := unix.EpollCreate1(0)
 	if err != nil {
