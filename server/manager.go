@@ -20,8 +20,7 @@ const AcceptAmount = 8
 // 使用 sync.OnceValue 确保 manager 只被初始化一次（线程安全）
 var newManager = sync.OnceValue(func() *manager {
 	m := &manager{
-		tcm:            taskConsumerManager.New(), // 任务消费者管理器
-		relayContainer: cmap.New[*connContainer.Container](),
+		tcm: taskConsumerManager.New(), // 任务消费者管理器
 	}
 
 	m.bufPool = sync.Pool{

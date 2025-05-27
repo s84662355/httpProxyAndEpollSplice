@@ -23,16 +23,35 @@ type FdConn struct {
 }
 
 // 添加文件描述符（线程安全）
-func (m *EpollManager) AddFD(src, dst int) {
+func (m *EpollManager) AddFD(src, dst net.Conn) error {
 	m.epfdMu.Lock()
 	defer m.epfdMu.Unlock()
-	unix.EpollCtl(m.epfd, unix.EPOLL_CTL_ADD, src, &unix.EpollEvent{
-		Events: uint32(uintptr(unix.EPOLLIN)),
-		Fd:     int32(src),
-		Pad:    int32(dst),
-	})
 
-	m.epollFdMap
+	if srcFd, err := netFd(src); err == nil {
+		if dstFd, err := netFd(dst); err == nil {
+
+			err = unix.EpollCtl(m.epfd, unix.EPOLL_CTL_ADD, src, &unix.EpollEvent{
+				Events: uint32(uintptr(unix.EPOLLIN)),
+				Fd:     int32(srcFd),
+				Pad:    int32(dstFd),
+			})
+			if err != nil {
+				return err
+			}
+
+			m.epollFdMap.Upsert(srcFd, nil, func(exists bool, valueInMap *FdConn, newValue *FdConn) *FdConn {
+				return &FdConn{
+					conn:  src,
+					dstFd: dstFd,
+				}
+			})
+
+		} else {
+			return err
+		}
+	} else {
+		return err
+	}
 
 	// 将客户端套接字添加到 epoll 实例中
 	// err = unix.EpollCtl(epfd, unix.EPOLL_CTL_ADD, int(cfd.Fd()), &unix.EpollEvent{
@@ -44,10 +63,21 @@ func (m *EpollManager) AddFD(src, dst int) {
 }
 
 // 删除文件描述符（线程安全）
-func (m *EpollManager) DelFD(src int) {
+func (m *EpollManager) DelFD(src net.Conn) {
 	m.epfdMu.Lock()
 	defer m.epfdMu.Unlock()
-	unix.EpollCtl(m.epfd, unix.EPOLL_CTL_DEL, src, nil)
+	if srcFd, err := netFd(src); err == nil {
+		// Monkey should be removed
+		result := m.RemoveCb(srcFd, func(key int, val *FdConn, exists bool) bool {
+			if exists && val.src == conn {
+				unix.EpollCtl(m.epfd, unix.EPOLL_CTL_DEL, srcFd, nil)
+				return true
+
+			}
+
+			return false
+		})
+	}
 }
 
 // 多个协程可以同时调用 EpollWait
