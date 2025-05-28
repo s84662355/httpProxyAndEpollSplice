@@ -70,7 +70,10 @@ func (m *EpollManager) DelFD(src net.Conn) {
 		// Monkey should be removed
 		result := m.RemoveCb(srcFd, func(key int, val *FdConn, exists bool) bool {
 			if exists && val.src == conn {
-				unix.EpollCtl(m.epfd, unix.EPOLL_CTL_DEL, srcFd, nil)
+				if err:=unix.EpollCtl(m.epfd, unix.EPOLL_CTL_DEL, srcFd, nil);err!=nil{
+					return false
+				}
+				conn.Close()
 				return true
 
 			}
